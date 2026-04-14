@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MILAP PRO</title>
+
+<style>
+body { font-family: Arial; background:#0f172a; color:white; margin:0; }
+.header { background:#020617; padding:12px; text-align:center; font-weight:bold; }
+.container { padding:10px; }
+
+button, input, select {
+  width:100%; padding:10px; margin:5px 0;
+  border:none; border-radius:6px;
+}
+button { background:#22c55e; color:white; }
+
+.card {
+  background:#020617;
+  padding:10px;
+  margin:6px 0;
+  border-radius:10px;
+}
+
+.row { display:flex; gap:5px; }
+.small { font-size:12px; color:#94a3b8; }
+</style>
+</head>
+
+<body>
+
+<div class="header">MILAP PRO</div>
+<div class="container" id="app"></div>
+
+<script>
+  function showAddCustomer(){
+  app.innerHTML = `
+    <button onclick="home()">⬅ Back</button>
+
+    <h3>Add Customer</h3>
+
+    <input id="cname" placeholder="Customer Name">
+
+    <select id="ccategory">
+      <option value="">Select Category</option>
+      <option value="Big Market">Big Market</option>
+      <option value="Bandi">Bandi</option>
+      <option value="Village">Village</option>
+      <option value="RY">RY</option>
+    </select>
+
+    <button onclick="saveCustomer()">Save Customer</button>
+  `;
+}
+
+  function saveCustomer(){
+  let name = document.getElementById("cname").value.trim();
+  let category = document.getElementById("ccategory").value;
+
+  if(!name) return alert("Enter name");
+  if(!category) return alert("Select category");
+
+  customers.push({
+    name,
+    category,
+    transactions:[]
+  });
+
+  save();
+  home();
+}
+
+// ================= FIXED APP INIT (IMPORTANT) =================
+const app = document.getElementById("app");
+
+// ================= DATA =================
+
+const ADMIN = "skabbas938168@gmail.com";
+const MANAGER = "sknayeem1977@gmail.com";
+
+let userRole = "staff";
+
+let customers = JSON.parse(localStorage.getItem("customers")) || [];
+
+let itemList = JSON.parse(localStorage.getItem("itemList")) || [
+  { name: "Tomato", price: 20 },
+  { name: "Mirchi", price: 30 },
+  { name: "Brinjal", price: 25 }
+];
+
+let currentCustomerIndex = null;
+let searchText = "";
+let categoryFilter = "All";
+
+function save(){ localStorage.setItem("customers", JSON.stringify(customers)); }
+function saveItems(){ localStorage.setItem("itemList", JSON.stringify(itemList)); }
+
+function money(n){
+  return "₹" + (Number(n)||0).toLocaleString("en-IN");
+}
+
+// ================= SEARCH =================
+function searchCustomer(v){
+  searchText = v.toLowerCase();
+  renderGrouped();
+}
+
+// ================= FILTER =================
+function filterCat(cat){
+  categoryFilter = cat;
+  renderGrouped();
+}
+
+// ================= LOGIN =================
+function loginPage(){
+  app.innerHTML = `
+    <h3>Login</h3>
+    <input id="email" placeholder="Enter Email">
+    <button onclick="login()">Login</button>
+  `;
+}
+
+function login(){
+  let email = document.getElementById("email").value.trim();
+
+  if(email === ADMIN) userRole="admin";
+  else if(email === MANAGER) userRole="manager";
+  else userRole="staff";
+
+  home();
+}
+
+// ================= HOME =================
+function home(){
+
+  let totalPending=0, todaySales=0, todayCollection=0;
+  let today = new Date().toISOString().split("T")[0];
+
+  customers.forEach(c=>{
+    (c.transactions||[]).forEach(t=>{
+      totalPending += t.remaining||0;
+      if(t.date===today){
+        todaySales += t.total||0;
+        todayCollection += t.paid||0;
+      }
+    });
+  });
+
+  app.innerHTML = `
+  <div class="card">
+    💰 Pending: ${money(totalPending)}<br>
+    📅 Sales: ${money(todaySales)}<br>
+    📈 Collection: ${money(todayCollection)}<br>
+    👥 Customers: ${customers.length}
+  </div>
+
+  <input placeholder="Search name..." oninput="searchCustomer(this.value)">
+  <button onclick="showAddCustomer()">+ Add Customer</button>
+  
+  <div class="row">
+    <button onclick="filterCat('All')">All</button>
+    <button onclick="filterCat('Bandi')">Bandi</button>
+    <button onclick="filterCat('Village')">Village</button>
+    <button onclick="filterCat('RY')">RY</button>
+    <button onclick="filterCat('Big Market')">Big</button>
+  </div>
+
+  <div id="list"></div>
+  `;
+
+  renderGrouped();
+}
+
+// ================= GROUP =================
+function renderGrouped(){
+
+  let cats = ["Big Market","Bandi","Village","RY"];
+  let html="";
+
+  cats.forEach(cat=>{
+
+    if(categoryFilter !== "All" && categoryFilter !== cat) return;
+
+    let filtered = customers.filter(c =>
+      c.category === cat &&
+      c.name.toLowerCase().includes(searchText)
+    );
+
+    html += `<h3>${cat}</h3>`;
+
+    filtered.forEach(c=>{
+      let i = customers.indexOf(c);
+
+      let pending = (c.transactions||[])
+        .reduce((s,t)=>s+(t.remaining||0),0);
+
+      let itemsText = "";
+
+      (c.transactions||[]).slice(-2).forEach(t=>{
+        (t.items||[]).forEach(it=>{
+          itemsText += `${it.name} - ${it.qty}×${it.price} = ${it.qty*it.price}<br>`;
+        });
+      });
+
+      html += `
+        <div class="card" onclick="openCustomer(${i})">
+          <b>${c.name}</b><br>
+          <div class="small">${itemsText}</div>
+          <b>Pending:</b> ${money(pending)}
+        </div>
+      `;
+    });
+  });
+
+  document.getElementById("list").innerHTML = html;
+}
+
+// ================= CUSTOMER =================
+function openCustomer(i){
+
+  let c = customers[i];
+  if(!c.transactions) c.transactions = [];
+
+  let html = `
+    <button onclick="home()">⬅ Back</button>
+    <button onclick="addEntry(${i})">+ Entry</button>
+  `;
+
+  c.transactions.forEach((t,ti)=>{
+
+    let itemsText = "";
+
+    (t.items||[]).forEach(it=>{
+      itemsText += `🥕 ${it.name} | ${it.qty}×${it.price} = ${it.qty*it.price}<br>`;
+    });
+
+    html += `
+      <div class="card">
+        📅 ${t.date}<br><br>
+        <div class="small">${itemsText}</div>
+        Total: ${money(t.total)}<br>
+        Paid: ${money(t.paid)}<br>
+        Due: ${money(t.remaining)}
+
+        <div class="row">
+          <button onclick="payFull(${i},${ti})">Full</button>
+          <button onclick="payHalf(${i},${ti})">Half</button>
+          <button onclick="payCustom(${i},${ti})">Custom</button>
+        </div>
+      </div>
+    `;
+  });
+
+  app.innerHTML = html;
+}
+
+// ================= ADD ENTRY =================
+function addEntry(i){
+
+  let today = new Date().toISOString().split("T")[0];
+
+  app.innerHTML = `
+    <button onclick="openCustomer(${i})">⬅ Back</button>
+
+    <h3>Add Entry</h3>
+
+    <input type="date" id="date" value="${today}">
+
+    <select id="itemSelect" onchange="fillPrice()">
+      ${itemList.map((item,idx)=>`
+        <option value="${idx}">${item.name}</option>
+      `).join("")}
+      <option value="new">+ Add New Item</option>
+    </select>
+
+    <input id="qty" type="number" placeholder="Quantity">
+    <input id="price" type="number" placeholder="Price">
+
+    <button onclick="saveEntry(${i})">Save Entry</button>
+  `;
+}
+
+function fillPrice(){
+  let val = document.getElementById("itemSelect").value;
+
+  if(val==="new"){
+    let name = prompt("Item name");
+    let price = Number(prompt("Price"));
+
+    itemList.push({name,price});
+    saveItems();
+    addEntry(currentCustomerIndex);
+    return;
+  }
+
+  document.getElementById("price").value = itemList[val].price;
+}
+
+// ================= SAVE =================
+function saveEntry(i){
+
+  let c = customers[i];
+
+  let itemIndex = document.getElementById("itemSelect").value;
+  let qty = Number(document.getElementById("qty").value);
+  let price = Number(document.getElementById("price").value);
+  let date = document.getElementById("date").value;
+
+  if(!qty || !price) return alert("Fill all");
+
+  let name = itemList[itemIndex].name;
+  let total = qty * price;
+
+  c.transactions.push({
+    date,
+    items:[{name,qty,price}],
+    total,
+    paid:0,
+    remaining:total
+  });
+
+  save();
+  openCustomer(i);
+}
+
+// ================= PAY =================
+function payFull(i,ti){
+  let t = customers[i].transactions[ti];
+  t.paid += t.remaining;
+  t.remaining = 0;
+  save(); openCustomer(i);
+}
+
+function payHalf(i,ti){
+  let t = customers[i].transactions[ti];
+  let pay = t.remaining/2;
+  t.paid += pay;
+  t.remaining -= pay;
+  save(); openCustomer(i);
+}
+
+function payCustom(i,ti){
+  let amt = Number(prompt("Amount"));
+  let t = customers[i].transactions[ti];
+
+  if(amt>t.remaining) amt=t.remaining;
+
+  t.paid += amt;
+  t.remaining -= amt;
+
+  save(); openCustomer(i);
+}
+
+// ================= START =================
+loginPage();
+
+</script>
+
+</body>
+</html>
